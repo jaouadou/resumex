@@ -25,10 +25,12 @@ func run(args []string) error {
 
 	var outputPath string
 	var chromePath string
+	var scale float64
 	flags.StringVar(&outputPath, "o", "", "output PDF path")
 	flags.StringVar(&chromePath, "chrome", "", "path to Chrome or Chromium executable")
+	flags.Float64Var(&scale, "scale", 1, "theme scale factor; use values below 1 to fit more content")
 	flags.Usage = func() {
-		fmt.Fprintln(flags.Output(), "usage: resumex [-o output.pdf] [-chrome /path/to/chrome] resume.json")
+		fmt.Fprintln(flags.Output(), "usage: resumex [-o output.pdf] [-chrome /path/to/chrome] [-scale 0.9] resume.json")
 		flags.PrintDefaults()
 	}
 
@@ -38,6 +40,9 @@ func run(args []string) error {
 	if flags.NArg() != 1 {
 		flags.Usage()
 		return fmt.Errorf("expected exactly one resume JSON file")
+	}
+	if scale <= 0 {
+		return fmt.Errorf("-scale must be greater than 0")
 	}
 
 	inputPath := flags.Arg(0)
@@ -56,7 +61,7 @@ func run(args []string) error {
 		return err
 	}
 
-	html, err := theme.Render(parsed)
+	html, err := theme.RenderWithOptions(parsed, theme.Options{Scale: scale})
 	if err != nil {
 		return err
 	}
@@ -84,13 +89,13 @@ func reorderFlags(args []string) []string {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch {
-		case arg == "-o" || arg == "-chrome":
+		case arg == "-o" || arg == "-chrome" || arg == "-scale":
 			flagArgs = append(flagArgs, arg)
 			if i+1 < len(args) {
 				i++
 				flagArgs = append(flagArgs, args[i])
 			}
-		case strings.HasPrefix(arg, "-o=") || strings.HasPrefix(arg, "-chrome="):
+		case strings.HasPrefix(arg, "-o=") || strings.HasPrefix(arg, "-chrome=") || strings.HasPrefix(arg, "-scale="):
 			flagArgs = append(flagArgs, arg)
 		default:
 			positional = append(positional, arg)

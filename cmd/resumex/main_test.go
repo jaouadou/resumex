@@ -19,7 +19,7 @@ func TestCLIProducesPDF(t *testing.T) {
 	tempDir := t.TempDir()
 	outputPath := filepath.Join(tempDir, "resume.pdf")
 
-	cmd := exec.Command("go", "run", ".", "../../testdata/resume-sample.json", "-chrome", chromePath, "-o", outputPath)
+	cmd := exec.Command("go", "run", ".", "../../testdata/resume-sample.json", "-chrome", chromePath, "-scale", "0.9", "-o", outputPath)
 	cmd.Dir = "."
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

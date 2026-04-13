@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"embed"
 	"encoding/base64"
+	"fmt"
 	"html/template"
 	"strings"
 	"time"
@@ -18,12 +19,36 @@ var fontFiles embed.FS
 
 var markdown = goldmark.New()
 
+type Options struct {
+	Scale float64
+}
+
 type view struct {
 	Title    string
 	Fonts    fonts
+	CSS      cssScale
 	Hero     hero
 	Summary  template.HTML
 	Sections []section
+}
+
+type cssScale struct {
+	BaseFontPX         template.CSS
+	LayoutBottomPX     template.CSS
+	SectionBottomPX    template.CSS
+	SectionBodyMarginX template.CSS
+	HeroMarginTopPX    template.CSS
+	HeroMarginBottomPX template.CSS
+	ContactGapY        template.CSS
+	ContactGapX        template.CSS
+	IconMarginRightPX  template.CSS
+	ExperienceBottomPX template.CSS
+	MetaGapPX          template.CSS
+	SummaryBottomPX    template.CSS
+	ListPaddingLeftPX  template.CSS
+	LineBottomPX       template.CSS
+	LineListMarginPX   template.CSS
+	ReferenceBottomPX  template.CSS
 }
 
 type fonts struct {
@@ -69,16 +94,49 @@ type reference struct {
 }
 
 func Render(r *resume.Resume) (string, error) {
+	return RenderWithOptions(r, Options{})
+}
+
+func RenderWithOptions(r *resume.Resume, options Options) (string, error) {
 	data, err := buildView(r)
 	if err != nil {
 		return "", err
 	}
+	data.CSS = buildCSSScale(options.Scale)
 
 	var out bytes.Buffer
 	if err := pageTemplate.Execute(&out, data); err != nil {
 		return "", err
 	}
 	return out.String(), nil
+}
+
+func buildCSSScale(scale float64) cssScale {
+	if scale <= 0 {
+		scale = 1
+	}
+	return cssScale{
+		BaseFontPX:         cssPX(11, scale),
+		LayoutBottomPX:     cssPX(40, scale),
+		SectionBottomPX:    cssPX(18, scale),
+		SectionBodyMarginX: cssPX(8, scale),
+		HeroMarginTopPX:    cssPX(20, scale),
+		HeroMarginBottomPX: cssPX(20, scale),
+		ContactGapY:        cssPX(10, scale),
+		ContactGapX:        cssPX(20, scale),
+		IconMarginRightPX:  cssPX(5, scale),
+		ExperienceBottomPX: cssPX(10, scale),
+		MetaGapPX:          cssPX(16, scale),
+		SummaryBottomPX:    cssPX(5, scale),
+		ListPaddingLeftPX:  cssPX(20, scale),
+		LineBottomPX:       cssPX(5, scale),
+		LineListMarginPX:   cssPX(5, scale),
+		ReferenceBottomPX:  cssPX(15, scale),
+	}
+}
+
+func cssPX(value, scale float64) template.CSS {
+	return template.CSS(fmt.Sprintf("%.2fpx", value*scale))
 }
 
 func buildView(r *resume.Resume) (view, error) {
@@ -398,7 +456,7 @@ var pageTemplate = template.Must(template.New("professional").Funcs(template.Fun
     html {
       font-family: LatinModern, "Courier New", monospace;
       background: #fff;
-      font-size: 11px;
+      font-size: {{.CSS.BaseFontPX}};
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
@@ -440,13 +498,13 @@ var pageTemplate = template.Must(template.New("professional").Funcs(template.Fun
 
     .layout {
       max-width: 660px;
-      margin: 0 auto 40px;
+      margin: 0 auto {{.CSS.LayoutBottomPX}};
       line-height: calc(1ex / 0.32);
     }
 
     .section {
       max-width: 700px;
-      margin: 0 auto 18px;
+      margin: 0 auto {{.CSS.SectionBottomPX}};
     }
 
     .section h2 {
@@ -461,19 +519,19 @@ var pageTemplate = template.Must(template.New("professional").Funcs(template.Fun
     }
 
     .section-body {
-      margin: 0 8px;
+      margin: 0 {{.CSS.SectionBodyMarginX}};
     }
 
     .title {
       font-size: 3rem;
       text-align: center;
-      margin-top: 20px;
-      margin-bottom: 20px;
+      margin-top: {{.CSS.HeroMarginTopPX}};
+      margin-bottom: {{.CSS.HeroMarginBottomPX}};
     }
 
     .basic-info {
       display: flex;
-      gap: 10px 20px;
+      gap: {{.CSS.ContactGapY}} {{.CSS.ContactGapX}};
       justify-content: center;
       flex-wrap: wrap;
     }
@@ -486,20 +544,20 @@ var pageTemplate = template.Must(template.New("professional").Funcs(template.Fun
 
     .info svg {
       color: #000;
-      margin-right: 5px;
+      margin-right: {{.CSS.IconMarginRightPX}};
       width: 10px;
       height: 10px;
       flex: 0 0 auto;
     }
 
     .experience {
-      margin-bottom: 10px;
+      margin-bottom: {{.CSS.ExperienceBottomPX}};
     }
 
     .experience-meta {
       display: flex;
       justify-content: space-between;
-      gap: 16px;
+      gap: {{.CSS.MetaGapPX}};
       margin-bottom: 2px;
     }
 
@@ -522,11 +580,11 @@ var pageTemplate = template.Must(template.New("professional").Funcs(template.Fun
     }
 
     .summary {
-      margin-bottom: 5px;
+      margin-bottom: {{.CSS.SummaryBottomPX}};
     }
 
     .list {
-      padding-left: 20px;
+      padding-left: {{.CSS.ListPaddingLeftPX}};
       line-height: 16px;
     }
 
@@ -539,7 +597,7 @@ var pageTemplate = template.Must(template.New("professional").Funcs(template.Fun
     }
 
     .one-line {
-      margin-bottom: 5px;
+      margin-bottom: {{.CSS.LineBottomPX}};
       display: flex;
       align-items: baseline;
     }
@@ -552,11 +610,11 @@ var pageTemplate = template.Must(template.New("professional").Funcs(template.Fun
 
     .one-line-list {
       font-size: 1.4rem;
-      margin-left: 5px;
+      margin-left: {{.CSS.LineListMarginPX}};
     }
 
     .reference {
-      margin-bottom: 15px;
+      margin-bottom: {{.CSS.ReferenceBottomPX}};
     }
 
     .reference-name {

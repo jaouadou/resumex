@@ -12,18 +12,21 @@ It implements  the rendering path needed for this job:
 ## Usage
 
 ```sh
-go run ./cmd/resumex [-o output.pdf] [-chrome /path/to/chrome] resume.json
+go run ./cmd/resumex [-o output.pdf] [-chrome /path/to/chrome] [-scale 0.9] resume.json
 ```
 
 Examples:
 
 ```sh
 go run ./cmd/resumex ../jsonresumex/packages/test-fixtures/resume-sample.json -o /tmp/resume.pdf
+go run ./cmd/resumex resume.json -scale 0.85 -o resume.pdf
 go build -o resumex ./cmd/resumex
 ./resumex resume.json
 ```
 
 If `-o` is omitted, the PDF is written beside the input file as `<input-basename>.pdf`.
+
+If `-scale` is omitted, the theme renders at `1.0`. Use a smaller value, such as `0.9` or `0.85`, to reduce font size and vertical spacing so more content fits on a page.
 
 If `-chrome` is omitted, the CLI tries to find Chrome or Chromium using common install paths and executable names. On macOS it checks `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`.
 
@@ -31,7 +34,7 @@ If `-chrome` is omitted, the CLI tries to find Chrome or Chromium using common i
 
 The code is split into four small pieces:
 
-- `cmd/resumex`: CLI entrypoint. It parses flags, opens the input JSON, calls the theme renderer, and sends the resulting HTML to the PDF backend.
+- `cmd/resumex`: CLI entrypoint. It parses flags, opens the input JSON, calls the theme renderer with the selected scale, and sends the resulting HTML to the PDF backend.
 - `internal/resume`: Narrow JSON Resume model. It defines the fields consumed by the theme and decodes JSON into those types.
 - `internal/theme`: Classic theme clone. It maps resume data into view structs, renders markdown with `goldmark`, formats JSON Resume dates, embeds the Latin Modern font files with `go:embed`, and produces one self-contained HTML document.
 - `internal/pdf`: Chrome PDF backend. It writes the HTML to a temporary file, invokes headless Chrome or Chromium with `--print-to-pdf`, waits for a valid `%PDF` output, and cleans up temporary files.
@@ -41,7 +44,7 @@ The core data flow is:
 ```text
 resume.json
   -> internal/resume.Decode
-  -> internal/theme.Render
+  -> internal/theme.RenderWithOptions
   -> temporary resume.html
   -> local Chrome/Chromium print-to-PDF
   -> output.pdf
@@ -50,6 +53,7 @@ resume.json
 ## Theme Port
 
 - The theme is implemented with Go `html/template`.
+- The `-scale` flag adjusts the theme's base font size and spacing before PDF generation.
 - The section order matches the classic theme: summary, experience, projects, education, certificates, publications, awards, volunteer, languages, skills, interests, references.
 - Markdown is supported for summaries, descriptions, and bullet items through `github.com/yuin/goldmark`.
 - Raw HTML in markdown input is escaped before rendering.

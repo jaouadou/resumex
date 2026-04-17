@@ -9,29 +9,36 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 )
 
-func RenderHTML(chromePath, htmlContent, outputPath string) error {
+func RenderHTML(chromePath, htmlContent, outputPath string, replace bool) (string, error) {
 	chrome, err := DetectChrome(chromePath)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	outputPath, err = filepath.Abs(outputPath)
+	outputPath, err = ResolveOutputPath(outputPath)
 	if err != nil {
-		return err
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+		return "", err
+	}
+	if err := prepareOutput(outputPath, replace); err != nil {
+		return "", err
 	}
 
 	tempDir, err := os.MkdirTemp("", "resumex-*")
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer os.RemoveAll(tempDir)
 
 	htmlPath := filepath.Join(tempDir, "resume.html")
 	if err := os.WriteFile(htmlPath, []byte(htmlContent), 0o600); err != nil {
-		return err
+		return "", err
 	}
 
 	args := []string{
@@ -58,7 +65,7 @@ func RenderHTML(chromePath, htmlContent, outputPath string) error {
 	cmd.Stdout = &commandOutput
 	cmd.Stderr = &commandOutput
 	if err := cmd.Start(); err != nil {
-		return err
+		return "", err
 	}
 
 	done := make(chan error, 1)
@@ -67,9 +74,57 @@ func RenderHTML(chromePath, htmlContent, outputPath string) error {
 	}()
 
 	if err := waitForPDF(done, cmd, outputPath, 20*time.Second); err != nil {
-		return fmt.Errorf("chrome pdf generation failed: %w\n%s", err, commandOutput.String())
+		return "", fmt.Errorf("chrome pdf generation failed: %w\n%s", err, commandOutput.String())
 	}
-	return nil
+	return outputPath, nil
+}
+
+func ResolveOutputPath(outputPath string) (string, error) {
+	if outputPath == "" {
+		return "", errors.New("output path is empty")
+	}
+
+	dirLike := hasTrailingPathSeparator(outputPath)
+	abs, err := filepath.Abs(outputPath)
+	if err != nil {
+		return "", err
+	}
+
+	info, err := os.Stat(abs)
+	if err == nil {
+		if info.IsDir() {
+			return filepath.Join(abs, "resume.pdf"), nil
+		}
+		return abs, nil
+	}
+	if err != nil && !os.IsNotExist(err) {
+		return "", err
+	}
+	if dirLike {
+		return filepath.Join(abs, "resume.pdf"), nil
+	}
+	return abs, nil
+}
+
+func hasTrailingPathSeparator(path string) bool {
+	return strings.HasSuffix(path, "/") || strings.HasSuffix(path, `\`)
+}
+
+func prepareOutput(outputPath string, replace bool) error {
+	info, err := os.Stat(outputPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if info.IsDir() {
+		return fmt.Errorf("output path is a directory: %s", outputPath)
+	}
+	if !replace {
+		return fmt.Errorf("output file already exists: %s (use -replace to overwrite)", outputPath)
+	}
+	return os.Remove(outputPath)
 }
 
 func waitForPDF(done <-chan error, cmd *exec.Cmd, outputPath string, timeout time.Duration) error {

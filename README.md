@@ -12,7 +12,7 @@ It implements  the rendering path needed for this job:
 ## Usage
 
 ```sh
-go run ./cmd/resumex [-o output.pdf] [-chrome /path/to/chrome] [-scale 0.9] resume.json
+go run ./cmd/resumex [-o output.pdf] [-chrome /path/to/chrome] [-scale 0.9] [-replace] resume.json
 ```
 
 Examples:
@@ -20,11 +20,17 @@ Examples:
 ```sh
 go run ./cmd/resumex ../jsonresumex/packages/test-fixtures/resume-sample.json -o /tmp/resume.pdf
 go run ./cmd/resumex resume.json -scale 0.85 -o resume.pdf
+go run ./cmd/resumex resume.json -replace -o resume.pdf
+go run ./cmd/resumex resume.json -o output-dir
 go build -o resumex ./cmd/resumex
 ./resumex resume.json
 ```
 
 If `-o` is omitted, the PDF is written beside the input file as `<input-basename>.pdf`.
+
+If `-o` points to an existing directory, the PDF is written inside it as `resume.pdf`.
+
+If the output file already exists, the command exits with an error. Add `-replace` to overwrite the existing PDF.
 
 If `-scale` is omitted, the theme renders at `1.0`. Use a smaller value, such as `0.9` or `0.85`, to reduce font size and vertical spacing so more content fits on a page.
 

@@ -26,11 +26,13 @@ func run(args []string) error {
 	var outputPath string
 	var chromePath string
 	var scale float64
+	var replace bool
 	flags.StringVar(&outputPath, "o", "", "output PDF path")
 	flags.StringVar(&chromePath, "chrome", "", "path to Chrome or Chromium executable")
 	flags.Float64Var(&scale, "scale", 1, "theme scale factor; use values below 1 to fit more content")
+	flags.BoolVar(&replace, "replace", false, "replace the output PDF if it already exists")
 	flags.Usage = func() {
-		fmt.Fprintln(flags.Output(), "usage: resumex [-o output.pdf] [-chrome /path/to/chrome] [-scale 0.9] resume.json")
+		fmt.Fprintln(flags.Output(), "usage: resumex [-o output.pdf] [-chrome /path/to/chrome] [-scale 0.9] [-replace] resume.json")
 		flags.PrintDefaults()
 	}
 
@@ -66,11 +68,12 @@ func run(args []string) error {
 		return err
 	}
 
-	if err := pdf.RenderHTML(chromePath, html, outputPath); err != nil {
+	finalOutputPath, err := pdf.RenderHTML(chromePath, html, outputPath, replace)
+	if err != nil {
 		return err
 	}
 
-	fmt.Fprintln(os.Stdout, outputPath)
+	fmt.Fprintln(os.Stdout, finalOutputPath)
 	return nil
 }
 
@@ -89,6 +92,8 @@ func reorderFlags(args []string) []string {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch {
+		case arg == "-replace" || strings.HasPrefix(arg, "-replace="):
+			flagArgs = append(flagArgs, arg)
 		case arg == "-o" || arg == "-chrome" || arg == "-scale":
 			flagArgs = append(flagArgs, arg)
 			if i+1 < len(args) {

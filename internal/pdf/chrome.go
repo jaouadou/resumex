@@ -9,39 +9,58 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 )
 
-func RenderHTML(chromePath, htmlContent, outputPath string, replace bool) (string, error) {
-	chrome, err := DetectChrome(chromePath)
+type Options struct {
+	ChromePath string
+	OutputPath string
+	Replace    bool
+	Timeout    time.Duration
+}
+
+type Result struct {
+	Path string
+}
+
+func RenderHTML(htmlContent string, options Options) (Result, error) {
+	chrome, err := DetectChrome(options.ChromePath)
 	if err != nil {
-		return "", err
+		return Result{}, err
 	}
 
-	outputPath, err = ResolveOutputPath(outputPath)
+	outputPath, err := PrepareOutputPath(options.OutputPath, options.Replace)
 	if err != nil {
-		return "", err
-	}
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
-		return "", err
-	}
-	if err := prepareOutput(outputPath, replace); err != nil {
-		return "", err
+		return Result{}, err
 	}
 
 	tempDir, err := os.MkdirTemp("", "resumex-*")
 	if err != nil {
-		return "", err
+		return Result{}, err
 	}
 	defer os.RemoveAll(tempDir)
 
 	htmlPath := filepath.Join(tempDir, "resume.html")
 	if err := os.WriteFile(htmlPath, []byte(htmlContent), 0o600); err != nil {
-		return "", err
+		return Result{}, err
 	}
 
-	args := []string{
+	cmd := exec.Command(chrome, chromeArgs(tempDir, htmlPath, outputPath)...)
+	var commandOutput bytes.Buffer
+	cmd.Stdout = &commandOutput
+	cmd.Stderr = &commandOutput
+	if err := cmd.Start(); err != nil {
+		return Result{}, err
+	}
+
+	if err := waitForPDF(cmd, outputPath, timeoutOrDefault(options.Timeout)); err != nil {
+		return Result{}, fmt.Errorf("chrome pdf generation failed: %w\n%s", err, commandOutput.String())
+	}
+	return Result{Path: outputPath}, nil
+}
+
+func chromeArgs(tempDir, htmlPath, outputPath string) []string {
+	return []string{
 		"--headless=new",
 		"--disable-gpu",
 		"--no-sandbox",
@@ -59,75 +78,21 @@ func RenderHTML(chromePath, htmlContent, outputPath string, replace bool) (strin
 		"--print-to-pdf=" + outputPath,
 		fileURL(htmlPath),
 	}
+}
 
-	cmd := exec.Command(chrome, args...)
-	var commandOutput bytes.Buffer
-	cmd.Stdout = &commandOutput
-	cmd.Stderr = &commandOutput
-	if err := cmd.Start(); err != nil {
-		return "", err
+func timeoutOrDefault(timeout time.Duration) time.Duration {
+	if timeout <= 0 {
+		return 20 * time.Second
 	}
+	return timeout
+}
 
+func waitForPDF(cmd *exec.Cmd, outputPath string, timeout time.Duration) error {
 	done := make(chan error, 1)
 	go func() {
 		done <- cmd.Wait()
 	}()
 
-	if err := waitForPDF(done, cmd, outputPath, 20*time.Second); err != nil {
-		return "", fmt.Errorf("chrome pdf generation failed: %w\n%s", err, commandOutput.String())
-	}
-	return outputPath, nil
-}
-
-func ResolveOutputPath(outputPath string) (string, error) {
-	if outputPath == "" {
-		return "", errors.New("output path is empty")
-	}
-
-	dirLike := hasTrailingPathSeparator(outputPath)
-	abs, err := filepath.Abs(outputPath)
-	if err != nil {
-		return "", err
-	}
-
-	info, err := os.Stat(abs)
-	if err == nil {
-		if info.IsDir() {
-			return filepath.Join(abs, "resume.pdf"), nil
-		}
-		return abs, nil
-	}
-	if err != nil && !os.IsNotExist(err) {
-		return "", err
-	}
-	if dirLike {
-		return filepath.Join(abs, "resume.pdf"), nil
-	}
-	return abs, nil
-}
-
-func hasTrailingPathSeparator(path string) bool {
-	return strings.HasSuffix(path, "/") || strings.HasSuffix(path, `\`)
-}
-
-func prepareOutput(outputPath string, replace bool) error {
-	info, err := os.Stat(outputPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-	if info.IsDir() {
-		return fmt.Errorf("output path is a directory: %s", outputPath)
-	}
-	if !replace {
-		return fmt.Errorf("output file already exists: %s (use -replace to overwrite)", outputPath)
-	}
-	return os.Remove(outputPath)
-}
-
-func waitForPDF(done <-chan error, cmd *exec.Cmd, outputPath string, timeout time.Duration) error {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
